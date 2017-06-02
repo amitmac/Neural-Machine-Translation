@@ -32,13 +32,14 @@ class Bahadanau():
         # calculate alignment vector for each encoder_hidden_state
         # which equals to exp(score_i)/sum_{k=1}^{max_time_steps}(exp(score_{k})) for each single input
         # for a batch it would be (batch_size x max_time_steps)
-        alignment_vector = tf.div(tf.exp(score),
-                                    tf.reshape(tf.reduce_sum(tf.exp(score),1),[batch_size,1]))
+        score_exp = tf.exp(score)
+        alignment_vector = tf.div(score_exp,
+                                    tf.reshape(tf.reduce_sum(score_exp,1),[batch_size,1]))
 
         # calculate the weighted average of all the encoder hidden states according to alignment vector
-        # for that first reshape alignment_vector to batch_size x max_time_steps x 1
+        # - for that first reshape alignment_vector to batch_size x max_time_steps x 1
         alignment_vector = tf.reshape(alignment_vector,[-1,batch_max_time_steps,1])
-        context_vector = tf.reduce_mean(tf.multiply(encoder_outputs, alignment_vector),0)
+        context_vector = tf.reduce_mean(tf.multiply(encoder_outputs, alignment_vector),1)
 
         # reshape the context vector to (batch_size x decoder_hidden_units)
         context_vector = tf.reshape(context_vector,[-1,decoder_hidden_units])
@@ -59,19 +60,33 @@ class Bahadanau():
         batch_size = tf.shape(encoder_outputs)[0]
         W_score_reshaped = tf.reshape(tf.tile(self.W_score, [batch_size ,1]),
                                       [-1,self.num_units, self.num_units])
-        # inter_Score - (batch_size, max_time_steps, num_units
-        inter_score = tf.multiply(decoder_outputs, W_score_reshaped)
+        # inter_Score - (batch_size, num_units, decoder_max_time_steps
+        inter_score = tf.transpose(tf.multiply(decoder_outputs, W_score_reshaped),[0,2,1])
 
-        
+        # score - (batch_size, encoder_max_time_step, decoder_max_time_step)
         score = tf.matmul(encoder_outputs, inter_score)
-        batch_size, batch_max_time_steps, _ = tf.unstack(tf.shape(score))
-        score = tf.reshape(score,[-1,batch_max_time_steps])
-        alignment_vector = tf.div(tf.exp(score),
-                                    tf.reshape(tf.reduce_sum(tf.exp(score),1),[batch_size,1]))
-        alignment_vector = tf.reshape(alignment_vector,[-1,batch_max_time_steps,1])
-        context_vector = tf.reduce_mean(tf.multiply(encoder_outputs, alignment_vector),0)
-        context_vector = tf.reshape(context_vector,[-1,decoder_hidden_units])
-        concat_cv_po = tf.concat([context_vector, previous_output],axis=1)
-        h_t_bar = tf.matmul(concat_cv_po, self.W_c) 
+
+        # get shape of score
+        batch_size, encoder_max_time_steps, decoder_max_time_steps = tf.unstack(tf.shape(score))
+        
+        # exponential of score values
+        score_exp = tf.exp(score)
+        # alignment vector - (batch_size, decoder_max_time_steps, encoder_max_time_steps)
+        alignment_vector = tf.transpose(tf.div(score_exp,
+                                        tf.reshape(tf.reduce_sum(score_exp,1),[batch_size,1,decoder_max_time_steps])),[0,2,1])
+        
+        # calculate the weighted average of all the encoder hidden states according to alignment vector
+        # context vector - (batch_size, decoder_max_time_steps, num_units)
+        context_vector = tf.div(tf.matmul(alignment_vector, encoder_outputs), 
+                                tf.reshape(tf.reduce_sum(alignment_vector,2),[batch_size,-1,1]))
+        
+        # calculate attentional hidden state by concatenating the context vector 
+        # and decoder_previous_outout and multiplying by a weight
+        concat_cv_po = tf.concat([context_vector, decoder_outputs],axis=2)
+        W_c_reshaped = tf.reshape(tf.tile(self.W_c, [batch_size ,1]),
+                                      [-1,2*self.num_units, self.num_units])
+        
+        # calculate the attentional hidden state - (batch_size x decoder_max_time_steps x decoder_hidden_units)
+        h_t_bar = tf.matmul(concat_cv_po, W_c_reshaped) 
 
         return h_t_bar

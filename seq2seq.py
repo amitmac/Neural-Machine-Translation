@@ -149,14 +149,16 @@ def loop_fn(time, previous_output, previous_state, previous_loop_state):
 decoder_outputs_ta, decoder_final_states, _ = tf.nn.raw_rnn(decoder_cell, loop_fn)
 decoder_outputs = decoder_outputs_ta.stack()
 
-# get shape of decoder output
-decoder_batch_size, decoder_max_steps, decoder_dim = tf.unstack(tf.shape(decoder_outputs))
+# pass all the outputs through attention model to get final outputs
+decoder_attn_outputs = attn.bahadanau_model_multi_step(decoder_outputs, encoder_outputs)
+ 
+_ , decoder_max_time_steps, _ = decoder_attn_outputs.get_shape().as_list()
 
-# output 
-decoder_outputs_flat = tf.reshape(decoder_outputs, [-1, decoder_dim])
+# calculate logits 
+decoder_outputs_flat = tf.reshape(decoder_attn_outputs, [-1, decoder_dim])
 decoder_logits_flat = tf.add(tf.matmul(decoder_outputs_flat, W_out), b_out)
 decoder_logits = tf.reshape(decoder_logits_flat, 
-                            [decoder_batch_size, decoder_max_steps, targ_vocabulary_size])
+                            [-1, decoder_max_time_steps, targ_vocabulary_size])
 
 # final prediction
 decoder_prediction = tf.argmax(decoder_logits, 2)
