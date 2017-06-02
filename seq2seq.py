@@ -119,7 +119,7 @@ def loop_fn_transition(time, previous_output, previous_state, previous_loop_stat
     
     def get_next_input(): 
         if use_attention:
-            h_bar = attn.bahadanau_model_single_step(previous_output,encoder_outputs,decoder_hidden_units)
+            h_bar = attn.bahadanau_model_single_step(previous_output,encoder_outputs)
         else:
             h_bar = previous_output
         
@@ -296,3 +296,4 @@ for epoch in range(num_epochs):
         if batch == 0 or batch % 10 == 0:
             print('batch {}'.format(batch))
             print('  minibatch loss: {}'.format(sess.run(loss, fd)))
+
