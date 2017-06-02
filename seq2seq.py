@@ -152,13 +152,13 @@ decoder_outputs = decoder_outputs_ta.stack()
 # pass all the outputs through attention model to get final outputs
 decoder_attn_outputs = attn.bahadanau_model_multi_step(decoder_outputs, encoder_outputs)
  
-_ , decoder_max_time_steps, _ = decoder_attn_outputs.get_shape().as_list()
+batch_size, decoder_max_time_steps, _ = tf.unstack(tf.shape(decoder_attn_outputs))
 
 # calculate logits 
 decoder_outputs_flat = tf.reshape(decoder_attn_outputs, [-1, decoder_dim])
 decoder_logits_flat = tf.add(tf.matmul(decoder_outputs_flat, W_out), b_out)
 decoder_logits = tf.reshape(decoder_logits_flat, 
-                            [-1, decoder_max_time_steps, targ_vocabulary_size])
+                            [batch_size , decoder_max_time_steps, targ_vocabulary_size])
 
 # final prediction
 decoder_prediction = tf.argmax(decoder_logits, 2)
@@ -179,6 +179,7 @@ sess.run(tf.global_variables_initializer())
 
 ##################### Read data #####################
 
+# define buckets (source, target)
 buckets = [(7, 13), (15, 20), (25, 30), (35, 40), (45, 50), (55,60)]
 
 def read_data(src_path, targ_path):
@@ -232,12 +233,14 @@ train_buckets_scale
 
 batch_size = 150
 def get_next_batch():
+    # get bucket id based on random number to return batch from
     random_number = np.random.random_sample()
     bucket_id = min([i for i in xrange(len(train_buckets_scale))
                      if train_buckets_scale[i] > random_number])
     
     bucket_size_permuation = np.random.permutation(train_bucket_sizes[bucket_id])
     
+    # get batch of data
     train_encoder_batch = np.array([train_set[bucket_id]['src'][x] 
                             for x in bucket_size_permuation[:batch_size]])
     
@@ -256,6 +259,7 @@ def get_next_batch():
         decoder_sequence_length: decoder_targets_length_
     }
 
+# read word vectors for embedding lookup
 src_embed = []
 with tf.gfile.GFile('data/src-embedding-lookup.txt', mode="rb") as src_embed_file:
     for line in src_embed_file:
@@ -270,22 +274,25 @@ with tf.gfile.GFile('data/targ-embedding-lookup.txt', mode="rb") as targ_embed_f
         line_list = [float(x) for x in line]
         targ_embed.append(line_list)
 
+# define the number of epochs and max batches
 num_epochs = 100000
 max_batches=int(train_total_size/ batch_size)
-for batch in range(max_batches):
+
+# list to track the loss for every batch
+loss_track = []
+
+# final step - run the tensorflow session
+for epoch in range(num_epochs):
+    for batch in range(max_batches):
         fd = get_next_batch()
+        
         fd[src_embeddings] = src_embed
         fd[targ_embeddings] = targ_embed
+        
         _, l = sess.run([train_op, loss], fd)
+        
         loss_track.append(l)
 
-        if batch == 0 or batch % batches_in_epoch == 0:
+        if batch == 0 or batch % 10 == 0:
             print('batch {}'.format(batch))
             print('  minibatch loss: {}'.format(sess.run(loss, fd)))
-            predict_ = sess.run(decoder_prediction, fd)
-            for i, (inp, pred) in enumerate(zip(fd[encoder_inputs].T, predict_.T)):
-                print('  sample {}:'.format(i + 1))
-                print('    input     > {}'.format(inp))
-                print('    predicted > {}'.format(pred))
-                if i >= 2:
-                    break

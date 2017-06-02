@@ -1,6 +1,9 @@
 import tensorflow as tf
 
 class Bahadanau():
+    """
+    Global attention model
+    """
     def __init__(self, num_units):
         # Define the weights and biases for calculating the score of decoder hidden state and 
         # each encoder hidden state
@@ -61,7 +64,7 @@ class Bahadanau():
         W_score_reshaped = tf.reshape(tf.tile(self.W_score, [batch_size ,1]),
                                       [-1,self.num_units, self.num_units])
         # inter_Score - (batch_size, num_units, decoder_max_time_steps
-        inter_score = tf.transpose(tf.multiply(decoder_outputs, W_score_reshaped),[0,2,1])
+        inter_score = tf.transpose(tf.matmul(decoder_outputs, W_score_reshaped),[0,2,1])
 
         # score - (batch_size, encoder_max_time_step, decoder_max_time_step)
         score = tf.matmul(encoder_outputs, inter_score)
@@ -85,7 +88,7 @@ class Bahadanau():
         concat_cv_po = tf.concat([context_vector, decoder_outputs],axis=2)
         W_c_reshaped = tf.reshape(tf.tile(self.W_c, [batch_size ,1]),
                                       [-1,2*self.num_units, self.num_units])
-        
+           
         # calculate the attentional hidden state - (batch_size x decoder_max_time_steps x decoder_hidden_units)
         h_t_bar = tf.matmul(concat_cv_po, W_c_reshaped) 
 
