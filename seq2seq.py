@@ -284,6 +284,7 @@ loss_track = []
 
 # final step - run the tensorflow session
 for epoch in range(num_epochs):
+    print("Epoch {}".format(epoch))
     for batch in range(max_batches):
         fd = get_next_batch()
         
